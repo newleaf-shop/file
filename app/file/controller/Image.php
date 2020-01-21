@@ -10,15 +10,21 @@ namespace app\file\controller;
 
 
 use app\file\common\FileBase;
+use app\file\helper\File;
 use app\file\model\SysFile;
 use Jasmine\helper\Config;
 use Jasmine\library\http\Request;
 
 class Image extends FileBase
 {
+    /**
+     * 读取
+     * @param Request $request
+     * @return array|false|string
+     * itwri 2020/1/19 14:30
+     */
     function index(Request $request)
     {
-
         try {
 
             $id = $request->get('id', 0);
@@ -55,6 +61,50 @@ class Image extends FileBase
             die();
         } catch (\Exception $exception) {
             die($exception->getMessage());
+        }
+    }
+
+    /**
+     * @param Request $request
+     * @return array|false|string
+     * itwri 2020/1/19 14:30
+     */
+    function upload(Request $request){
+        try{
+            $file = $this->file('file');
+
+            if(!($file instanceof File)){
+                throw new \Exception('no files has been uploaded.');
+            }
+
+            $rootPath = realpath(Config::get('PATH_ROOT','').'/../').'/';
+            $subDir = 'data/uploads/';
+            // 移动到框架应用根目录/uploads/ 目录下
+            $f = $file->validate(['size'=>1024*1024*2,'ext'=>'jpg,jpeg,png,gif'])->move($rootPath.$subDir);
+
+            if(!$f){
+                // 上传失败获取错误信息
+                return $this->error($f->getError());
+            }
+
+            $data = [];
+            $data['name'] = $f->getInfo('name');
+            $data['path'] = $subDir.str_replace('\\','/',$f->getSaveName());
+            $data['size'] = $f->getSize();
+            $data['create_time'] = date('Y-m-d H:i:s');
+            $data['modify_time'] = date('Y-m-d H:i:s');
+            $SysFileM = new SysFile();
+            $id = $SysFileM->insert($data);
+
+            if(!$id){
+                throw new \Exception('add failed.');
+            }
+
+            // 成功上传后 获取上传信息
+            return $this->success('success ',['url'=>url('file/image/index',['id'=>$id])]);
+
+        }catch (\Exception $exception){
+            return $this->error($exception->getMessage());
         }
     }
 }
