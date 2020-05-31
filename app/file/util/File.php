@@ -6,7 +6,7 @@
  * Time: 11:56
  */
 
-namespace app\file\helper;
+namespace app\file\util;
 
 
 use SplFileObject;

@@ -10,7 +10,7 @@ namespace app\file\controller;
 
 
 use app\file\common\FileBase;
-use app\file\helper\File;
+use app\file\util\File;
 use app\file\model\SysFile;
 use Jasmine\helper\Config;
 use Jasmine\library\http\Request;
@@ -71,7 +71,7 @@ class Image extends FileBase
      */
     function upload(Request $request){
         try{
-            $file = $this->file('file');
+            $file = $this->getUploadService()->file('file');
 
             if(!($file instanceof File)){
                 throw new \Exception('no files has been uploaded.');

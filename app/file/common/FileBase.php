@@ -9,117 +9,82 @@
 namespace app\file\common;
 
 
-use app\file\helper\File;
+use app\file\service\UploadService;
+use Jasmine\App;
+use Jasmine\helper\Config;
 use Jasmine\library\Controller;
 
 class FileBase extends Controller
 {
-    protected $file = [];
-
-    /***
-     * @param string $name
-     * @return array|mixed
-     * @throws \Exception
-     * itwri 2019/9/17 13:02
+    /**
+     * @var UploadService|null
      */
-    protected function file($name = '')
+    protected $UploadService = null;
+
+    /**
+     * FileBase constructor.
+     * @param App|null $app
+     * @throws \Exception
+     */
+    function __construct(?App $app = null)
     {
-        if (empty($this->file)) {
-            $this->file = isset($_FILES) ? $_FILES : [];
+        parent::__construct($app);
+
+        $this->UploadService = new UploadService();
+
+
+        $key = $this->request()->get('key','');
+        $sign = $this->request()->get('sign','');
+        $timestamp = $this->request()->get('timestamp','');
+        $ip = $this->getRequest()->ip();
+
+        /**
+         * 密钥不正确
+         */
+        if(($secret = Config::get('auth.keys.'.$key))){
+            throw new \Exception($this->error(3001));
         }
 
-        $files = $this->file;
-        if (!empty($files)) {
-            if (strpos($name, '.')) {
-                list($name, $sub) = explode('.', $name);
-            }
-
-            // 处理上传文件
-            $array = $this->dealUploadFiles($files, $name);
-
-            if ('' === $name) {
-                // 获取全部文件
-                return $array;
-            } elseif (isset($sub) && isset($array[$name][$sub])) {
-                return $array[$name][$sub];
-            } elseif (isset($array[$name])) {
-                return $array[$name];
-            }
+        /**
+         * 签名错误
+         */
+        if($sign != $this->getSignature(array_merge($this->getRequest()->only(['timestamp','key']),['ip'=>$ip]),$timestamp,$secret)){
+            throw new \Exception($this->error(3002));
         }
-        return null;
     }
 
     /**
-     * @param $files
-     * @param $name
-     * @return array
-     * @throws \Exception
-     * itwri 2019/9/17 12:58
+     * 生成签名方法 AccessKey + params + time + SecretKey
+     * @param array $data 数据
+     * @param int|string $timestamp 请求时间
+     * @param string $secret
+     * @return mixed
      */
-    protected function dealUploadFiles($files, $name)
+    function getSignature($data, $timestamp, $secret)
     {
-        $array = [];
-        foreach ($files as $key => $file) {
-            if ($file instanceof File) {
-                $array[$key] = $file;
-            } elseif (is_array($file['name'])) {
-                $item  = [];
-                $keys  = array_keys($file);
-                $count = count($file['name']);
-
-                for ($i = 0; $i < $count; $i++) {
-                    if ($file['error'][$i] > 0) {
-                        if ($name == $key) {
-                            $this->throwUploadFileError($file['error'][$i]);
-                        } else {
-                            continue;
-                        }
-                    }
-
-                    $temp['key'] = $key;
-
-                    foreach ($keys as $_key) {
-                        $temp[$_key] = $file[$_key][$i];
-                    }
-
-                    $item[] = (new File($temp['tmp_name']))->setUploadInfo($temp);
-                }
-
-                $array[$key] = $item;
-            } else {
-                if ($file['error'] > 0) {
-                    if ($key == $name) {
-                        $this->throwUploadFileError($file['error']);
-                    } else {
-                        continue;
-                    }
-                }
-
-                $array[$key] = (new File($file['tmp_name']))->setUploadInfo($file);
+        if (!$data) {
+            return md5($timestamp . $secret);
+        }
+        ksort($data);
+        $arr = array();
+        foreach ($data as $k => $v) {
+            if (is_array($v)) {
+                $arr[] = $k . '=' .  rawurlencode(implode(",", $v));
+            }else{
+                $arr[] = $k . '=' .  rawurlencode($v);
             }
         }
-
-        return $array;
+        //params + time + app_secret
+        $signStr = implode('&', $arr) . $timestamp . $secret;
+        $sign = md5($signStr);
+        return strtoupper($sign);
     }
 
     /**
-     * @param $error
-     * @throws \Exception
-     * itwri 2019/9/17 12:58
+     * @return UploadService|null
+     * itwri 2020/3/20 23:56
      */
-    protected function throwUploadFileError($error)
-    {
-        static $fileUploadErrors = [
-            1 => 'upload File size exceeds the maximum value',
-            2 => 'upload File size exceeds the maximum value',
-            3 => 'only the portion of file is uploaded',
-            4 => 'no file to uploaded',
-            6 => 'upload temp dir not found',
-            7 => 'file write error',
-        ];
-
-        $msg = $fileUploadErrors[$error];
-
-        throw new \Exception($msg);
+    function getUploadService(){
+        return $this->UploadService;
     }
 }
